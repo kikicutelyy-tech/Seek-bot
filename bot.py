@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
+
 from telegram import Update
 from telegram.constants import ChatType
 from telegram.ext import (
@@ -18,26 +19,71 @@ from telegram.ext import (
 
 load_dotenv()
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.5").strip()
+# =========================
+# НАСТРОЙКИ
+# =========================
+
+TELEGRAM_BOT_TOKEN = os.getenv(
+    "TELEGRAM_BOT_TOKEN",
+    ""
+).strip()
+
+OPENAI_API_KEY = os.getenv(
+    "OPENAI_API_KEY",
+    ""
+).strip()
+
+OPENAI_MODEL = os.getenv(
+    "OPENAI_MODEL",
+    "gpt-5.5"
+).strip()
+
+# Render автоматически даёт эти переменные
+PORT = int(
+    os.getenv(
+        "PORT",
+        "10000"
+    )
+)
+
+RENDER_EXTERNAL_HOSTNAME = os.getenv(
+    "RENDER_EXTERNAL_HOSTNAME",
+    ""
+).strip()
+
+DB_PATH = os.getenv(
+    "DB_PATH",
+    "seek_memory.db"
+)
 
 if not TELEGRAM_BOT_TOKEN:
-    raise RuntimeError("TELEGRAM_BOT_TOKEN не указан")
+    raise RuntimeError(
+        "TELEGRAM_BOT_TOKEN не указан"
+    )
 
 if not OPENAI_API_KEY:
-    raise RuntimeError("OPENAI_API_KEY не указан")
+    raise RuntimeError(
+        "OPENAI_API_KEY не указан"
+    )
 
-client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+if not RENDER_EXTERNAL_HOSTNAME:
+    raise RuntimeError(
+        "RENDER_EXTERNAL_HOSTNAME не указан. "
+        "Бот должен запускаться на Render Web Service."
+    )
 
-DB_PATH = os.getenv("DB_PATH", "seek_memory.db")
+client = AsyncOpenAI(
+    api_key=OPENAI_API_KEY
+)
 
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
     level=logging.INFO
 )
 
-log = logging.getLogger("seek-bot")
+log = logging.getLogger(
+    "seek-bot"
+)
 
 
 # =========================
@@ -76,7 +122,12 @@ db.commit()
 db_lock = asyncio.Lock()
 
 
-async def save_message(chat_id, user_id, user_name, text):
+async def save_message(
+    chat_id,
+    user_id,
+    user_name,
+    text
+):
 
     async with db_lock:
 
@@ -88,14 +139,16 @@ async def save_message(chat_id, user_id, user_name, text):
             """,
             (
                 str(chat_id),
-                str(user_id),
+                str(user_id) if user_id else None,
                 user_name,
                 text,
-                datetime.now(timezone.utc).isoformat()
+                datetime.now(
+                    timezone.utc
+                ).isoformat()
             )
         )
 
-        # Оставляем максимум 5000 сообщений на группу
+        # Максимум 5000 сообщений на группу
         db.execute(
             """
             DELETE FROM messages
@@ -108,7 +161,10 @@ async def save_message(chat_id, user_id, user_name, text):
                 LIMIT 5000
             )
             """,
-            (str(chat_id), str(chat_id))
+            (
+                str(chat_id),
+                str(chat_id)
+            )
         )
 
         db.commit()
@@ -131,17 +187,24 @@ async def save_memory(
             """,
             (
                 str(chat_id),
-                str(user_id) if user_id else None,
+                str(user_id)
+                if user_id
+                else None,
                 user_name,
                 memory,
-                datetime.now(timezone.utc).isoformat()
+                datetime.now(
+                    timezone.utc
+                ).isoformat()
             )
         )
 
         db.commit()
 
 
-async def get_memories(chat_id, limit=30):
+async def get_memories(
+    chat_id,
+    limit=30
+):
 
     async with db_lock:
 
@@ -153,13 +216,19 @@ async def get_memories(chat_id, limit=30):
             ORDER BY id DESC
             LIMIT ?
             """,
-            (str(chat_id), limit)
+            (
+                str(chat_id),
+                limit
+            )
         ).fetchall()
 
     return rows
 
 
-async def get_recent_messages(chat_id, limit=35):
+async def get_recent_messages(
+    chat_id,
+    limit=35
+):
 
     async with db_lock:
 
@@ -171,13 +240,20 @@ async def get_recent_messages(chat_id, limit=35):
             ORDER BY id DESC
             LIMIT ?
             """,
-            (str(chat_id), limit)
+            (
+                str(chat_id),
+                limit
+            )
         ).fetchall()
 
-    return list(reversed(rows))
+    return list(
+        reversed(rows)
+    )
 
 
-async def clear_memories(chat_id):
+async def clear_memories(
+    chat_id
+):
 
     async with db_lock:
 
@@ -306,9 +382,13 @@ async def ask_ai(
     speaker_name
 ):
 
-    memories = await get_memories(chat_id)
+    memories = await get_memories(
+        chat_id
+    )
 
-    recent_messages = await get_recent_messages(chat_id)
+    recent_messages = await get_recent_messages(
+        chat_id
+    )
 
     memory_text = "\n".join(
         f"- {name or 'Кто-то'}: {memory}"
@@ -316,7 +396,9 @@ async def ask_ai(
     )
 
     if not memory_text:
-        memory_text = "- Пока ничего важного нет."
+        memory_text = (
+            "- Пока ничего важного нет."
+        )
 
     recent_text = "\n".join(
         f"{name or 'Кто-то'}: {text}"
@@ -324,7 +406,9 @@ async def ask_ai(
     )
 
     if not recent_text:
-        recent_text = "- Недавних сообщений нет."
+        recent_text = (
+            "- Недавних сообщений нет."
+        )
 
     prompt = f"""
 
@@ -467,13 +551,16 @@ NO
 
 
 # =========================
-# КОМАНДА START
+# START
 # =========================
 
 async def start(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
+
+    if not update.message:
+        return
 
     await update.message.reply_text(
         "👁️ Я — Сик.\n\n"
@@ -498,6 +585,9 @@ async def ask_command(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
+
+    if not update.message:
+        return
 
     text = " ".join(
         context.args
@@ -547,6 +637,9 @@ async def remember(
     context: ContextTypes.DEFAULT_TYPE
 ):
 
+    if not update.message:
+        return
+
     text = " ".join(
         context.args
     ).strip()
@@ -583,6 +676,9 @@ async def memory(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
+
+    if not update.message:
+        return
 
     memories = await get_memories(
         update.effective_chat.id,
@@ -621,6 +717,9 @@ async def forget(
     context: ContextTypes.DEFAULT_TYPE
 ):
 
+    if not update.message:
+        return
+
     await clear_memories(
         update.effective_chat.id
     )
@@ -632,7 +731,7 @@ async def forget(
 
 
 # =========================
-# ОБРАБОТКА СООБЩЕНИЙ
+# ПРОВЕРКА ВЫЗОВА СИКА
 # =========================
 
 def is_seek_called(text):
@@ -644,6 +743,10 @@ def is_seek_called(text):
         or "seek" in text
     )
 
+
+# =========================
+# СООБЩЕНИЯ
+# =========================
 
 async def handle_message(
     update: Update,
@@ -661,11 +764,13 @@ async def handle_message(
     chat = update.effective_chat
     user = update.effective_user
 
-    user_name = get_user_name(user)
+    user_name = get_user_name(
+        user
+    )
 
     text = message.text.strip()
 
-    # Сохраняем сообщения группы
+    # Сохраняем сообщение
     await save_message(
         chat.id,
         user.id if user else None,
@@ -673,7 +778,7 @@ async def handle_message(
         text
     )
 
-    # В личке отвечаем на всё
+    # Личная переписка
     if chat.type == ChatType.PRIVATE:
 
         should_answer = True
@@ -684,8 +789,7 @@ async def handle_message(
             text
         )
 
-    # Если Сика не звали —
-    # иногда просто анализируем сообщение
+    # Если Сика не звали
     if not should_answer:
 
         if (
@@ -716,7 +820,7 @@ async def handle_message(
             answer
         )
 
-        # Если пользователь просил запомнить
+        # Автоматическое запоминание
         lower = text.lower()
 
         if any(
@@ -747,7 +851,7 @@ async def handle_message(
 
 
 # =========================
-# ЗАПУСК
+# POST INIT
 # =========================
 
 async def post_init(
@@ -779,8 +883,33 @@ async def post_init(
         ]
     )
 
+    log.info(
+        "Команды бота установлены"
+    )
+
+
+# =========================
+# ЗАПУСК WEBHOOK
+# =========================
 
 def main():
+
+    # HTTPS-адрес Render
+    webhook_url = (
+        f"https://{RENDER_EXTERNAL_HOSTNAME}/"
+    )
+
+    log.info(
+        "👁️ Seek AI Bot запускается..."
+    )
+
+    log.info(
+        f"🌐 Webhook: {webhook_url}"
+    )
+
+    log.info(
+        f"🔌 Port: {PORT}"
+    )
 
     application = (
         Application
@@ -790,6 +919,7 @@ def main():
         .build()
     )
 
+    # Команды
     application.add_handler(
         CommandHandler(
             "start",
@@ -825,6 +955,7 @@ def main():
         )
     )
 
+    # Обычные сообщения
     application.add_handler(
         MessageHandler(
             filters.TEXT & ~filters.COMMAND,
@@ -833,10 +964,14 @@ def main():
     )
 
     log.info(
-        "👁️ Seek AI Bot запущен"
+        "🚀 Запускаем Telegram Webhook..."
     )
 
-    application.run_polling(
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        url_path="",
+        webhook_url=webhook_url,
         drop_pending_updates=True
     )
 
